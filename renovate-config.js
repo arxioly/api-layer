@@ -1,13 +1,13 @@
 module.exports = {
     globalExtends: ["config:recommended"], // using this instead of "extends" solves the problem with order of the configuration
-    repositories: ['zowe/api-layer'],
-    baseBranches: ["v1.x.x"],
+    repositories: ['arxioly/api-layer'],
+    baseBranches: ["v2.x.x", "v3.x.x"],
     dependencyDashboard: true,
     packageRules: [
         {
             //for v2.x.x branch ignore grouping from extends preset, find all packages which are patches,
             // slug them and make PR with name "all patch dependencies"
-            "matchBaseBranches": ["v1.x.x"],
+            "matchBaseBranches": ["v2.x.x"],
             "groupName": "all patch dependencies",
             "groupSlug": "all-patch",
             "matchPackageNames": ["*"],
@@ -15,7 +15,7 @@ module.exports = {
         },
         {
             //for v2.x.x make dashboard approval to all major and minor dependencies updates
-            "matchBaseBranches": ["v1.x.x"],
+            "matchBaseBranches": ["v2.x.x"],
             "matchUpdateTypes": ["major", "minor"],
             "dependencyDashboardApproval": true,
         },
