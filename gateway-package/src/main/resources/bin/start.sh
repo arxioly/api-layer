@@ -84,12 +84,19 @@
 
 if [ -n "${LAUNCH_COMPONENT}" ]
 then
-    JAR_FILE="${LAUNCH_COMPONENT}/gateway-service.jar"
+    JAR_FILE="${LAUNCH_COMPONENT}/gateway-service-lite.jar"
 else
-    JAR_FILE="$(pwd)/bin/gateway-service.jar"
+    JAR_FILE="$(pwd)/bin/gateway-service-lite.jar"
 fi
 echo "jar file: "${JAR_FILE}
 # script assumes it's in the gateway component directory and common_lib needs to be relative path
+
+if [ -z "${CMMN_LB}" ]
+then
+    COMMON_LIB="../apiml-common-lib/bin/api-layer-lite-lib-all.jar"
+else
+    COMMON_LIB=${CMMN_LB}
+fi
 
 if [ -z "${LIBRARY_PATH}" ]
 then
@@ -122,11 +129,32 @@ else
   nonStrictVerifySslCertificatesOfServices=false
 fi
 
+if [ "$(uname)" = "OS/390" ]
+then
+    QUICK_START=-Xquickstart
+    GATEWAY_LOADER_PATH=${COMMON_LIB},/usr/include/java_classes/IRRRacf.jar
+else
+    GATEWAY_LOADER_PATH=${COMMON_LIB}
+fi
+
+# Check if the directory containing the ZAAS shared JARs was set and append it to the ZAAS loader path
+if [ -n "${ZWE_GATEWAY_SHARED_LIBS}" ]
+then
+    GATEWAY_LOADER_PATH=${ZWE_GATEWAY_SHARED_LIBS},${GATEWAY_LOADER_PATH}
+fi
+
+echo "Setting loader path: "${GATEWAY_LOADER_PATH}
+
 ATTLS_ENABLED="false"
-# ZWE_configs_spring_profiles_active for back compatibility, should be removed in v3 - enabling via Spring profile
-if [ "${ZWE_zowe_network_server_tls_attls}" = "true" -o "$(echo ${ZWE_configs_spring_profiles_active:-} | awk '/^(.*,)?attls(,.*)?$/')" ]; then
+ATTLS_CLIENT_ENABLED="false"
+
+if [ "${ZWE_zowe_network_server_tls_attls}" = "true" ]; then
   ATTLS_ENABLED="true"
 fi
+if [ "${ZWE_zowe_network_client_tls_attls}" = "true" ]; then
+  ATTLS_CLIENT_ENABLED="true"
+fi
+
 if [ "${ATTLS_ENABLED}" = "true" ]; then
   ZWE_configs_server_ssl_enabled="false"
   if [ -n "${ZWE_configs_spring_profiles_active}" ]; then
@@ -135,10 +163,11 @@ if [ "${ATTLS_ENABLED}" = "true" ]; then
   ZWE_configs_spring_profiles_active="${ZWE_configs_spring_profiles_active}attls"
 fi
 
-# Verify discovery service URL in case AT-TLS is enabled, assumes outgoing rules are in place
+internalProtocol="https"
 ZWE_DISCOVERY_SERVICES_LIST=${ZWE_DISCOVERY_SERVICES_LIST:-"https://${ZWE_haInstance_hostname:-localhost}:${ZWE_components_discovery_port:-7553}/eureka/"}
-if [ "${ATTLS_ENABLED}" = "true" ]; then
+if [ "${ATTLS_CLIENT_ENABLED}" = "true" ]; then
     ZWE_DISCOVERY_SERVICES_LIST=$(echo "${ZWE_DISCOVERY_SERVICES_LIST=}" | sed -e 's|https://|http://|g')
+    internalProtocol=http
     ZWE_configs_apiml_service_corsEnabled=true
 fi
 
@@ -147,15 +176,6 @@ if [ "${ZWE_configs_server_ssl_enabled:-true}" = "true" -o "$ATTLS_ENABLED" = "t
 else
     externalProtocol="http"
 fi
-
-GATEWAY_LOADER_PATH=""
-# Check if the directory containing the ZAAS shared JARs was set and append it to the ZAAS loader path
-if [ -n "${ZWE_GATEWAY_SHARED_LIBS}" ]
-then
-    GATEWAY_LOADER_PATH=${ZWE_GATEWAY_SHARED_LIBS}
-fi
-
-echo "Setting loader path: "${GATEWAY_LOADER_PATH}
 
 LIBPATH="$LIBPATH":"/lib"
 LIBPATH="$LIBPATH":"/usr/lib"
@@ -166,6 +186,11 @@ LIBPATH="$LIBPATH":"${JAVA_HOME}"/lib/s390/classic
 LIBPATH="$LIBPATH":"${JAVA_HOME}"/lib/s390/default
 LIBPATH="$LIBPATH":"${JAVA_HOME}"/lib/s390/j9vm
 LIBPATH="$LIBPATH":"${LIBRARY_PATH}"
+
+if [ -n "${ZWE_GATEWAY_LIBRARY_PATH}" ]
+then
+    LIBPATH="$LIBPATH":"${ZWE_GATEWAY_LIBRARY_PATH}"
+fi
 
 ADD_OPENS="--add-opens=java.base/java.lang=ALL-UNNAMED
         --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
@@ -319,6 +344,7 @@ _BPX_JOBNAME=${ZWE_zowe_job_prefix}${GATEWAY_CODE} ${JAVA_BIN_DIR}java \
     -Djdk.tls.client.cipherSuites=${client_ciphers} \
     -Djava.protocol.handler.pkgs=com.ibm.crypto.provider \
     -Djavax.net.debug=${ZWE_configs_sslDebug:-""} \
+    -Dloader.path=${GATEWAY_LOADER_PATH} \
     -Djava.library.path=${LIBPATH} \
     -Dloader.path=${GATEWAY_LOADER_PATH} \
     -jar ${JAR_FILE} &

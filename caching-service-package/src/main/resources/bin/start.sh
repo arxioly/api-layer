@@ -124,10 +124,15 @@ ADD_OPENS="--add-opens=java.base/java.lang=ALL-UNNAMED
         --add-opens=java.base/java.io=ALL-UNNAMED"
 
 ATTLS_ENABLED="false"
-# ZWE_configs_spring_profiles_active for back compatibility, should be removed in v3 - enabling via Spring profile
-if [ "${ZWE_zowe_network_server_tls_attls}" = "true" -o "$(echo ${ZWE_configs_spring_profiles_active:-} | awk '/^(.*,)?attls(,.*)?$/')" ]; then
+ATTLS_CLIENT_ENABLED="false"
+
+if [ "${ZWE_zowe_network_server_tls_attls}" = "true" ]; then
   ATTLS_ENABLED="true"
 fi
+if [ "${ZWE_zowe_network_client_tls_attls}" = "true" ]; then
+  ATTLS_CLIENT_ENABLED="true"
+fi
+
 if [ "${ATTLS_ENABLED}" = "true" ]; then
   ZWE_configs_server_ssl_enabled="false"
   if [ -n "${ZWE_configs_spring_profiles_active}" ]; then
@@ -138,7 +143,7 @@ fi
 
 # Verify discovery service URL in case AT-TLS is enabled, assumes outgoing rules are in place
 ZWE_DISCOVERY_SERVICES_LIST=${ZWE_DISCOVERY_SERVICES_LIST:-"https://${ZWE_haInstance_hostname:-localhost}:${ZWE_components_discovery_port:-7553}/eureka/"}
-if [ "${ATTLS_ENABLED}" = "true" ]; then
+if [ "${ATTLS_CLIENT_ENABLED}" = "true" ]; then
     ZWE_DISCOVERY_SERVICES_LIST=$(echo "${ZWE_DISCOVERY_SERVICES_LIST=}" | sed -e 's|https://|http://|g')
 fi
 
@@ -269,6 +274,7 @@ _BPX_JOBNAME=${ZWE_zowe_job_prefix}${CACHING_CODE} ${JAVA_BIN_DIR}java \
   -Dserver.ssl.trustStoreType="${truststore_type}" \
   -Dserver.ssl.trustStorePassword="${truststore_pass}" \
   -Djava.protocol.handler.pkgs=com.ibm.crypto.provider \
+  -Djava.net.preferIPv4Stack=true \
   -Djavax.net.debug=${ZWE_configs_sslDebug:-""} \
   -Djava.library.path=${LIBPATH} \
   -jar "${JAR_FILE}" &
