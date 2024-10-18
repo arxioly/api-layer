@@ -7,7 +7,7 @@ on:
 
 jobs:
     renovate:
-        runs-on: macos-latest
+        runs-on: windows-latest
 
         container:
             image: ghcr.io/renovatebot/renovate
